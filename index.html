@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap');
@@ -502,11 +503,20 @@
         <div class="space-y-2 no-print pt-2">
           <!-- Hlavné mobilné exporty -->
           <div class="grid grid-cols-2 gap-2">
-            <button onclick="printProtocol()" class="py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95">
-              <i class="fa-solid fa-file-pdf"></i> Tlač / PDF protokol
+            <button onclick="exportChartImage()" id="btn-export-chart" class="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/30 transition-all active:scale-95">
+              <i class="fa-solid fa-image"></i> Poslať graf (Obrázok)
             </button>
-            <button onclick="shareReportEmail()" class="py-2.5 px-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95">
-              <i class="fa-solid fa-envelope"></i> Odoslať E-mailom
+            <button onclick="exportDirectPDF()" id="btn-export-pdf" class="py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-900/30 transition-all active:scale-95">
+              <i class="fa-solid fa-file-pdf"></i> Zdieľať PDF (Súbor)
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="shareReportEmail()" class="py-2 px-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95">
+              <i class="fa-solid fa-envelope"></i> Text do E-mailu
+            </button>
+            <button onclick="printProtocol()" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95">
+              <i class="fa-solid fa-print"></i> Tlač / AirPrint
             </button>
           </div>
 
@@ -1598,8 +1608,262 @@
     }
 
     /* -------------------------------------------------------------
-     * EXPORTY: TLAČ / PDF, WEBHOOK, JSON, SCHRÁNKA
+     * EXPORTY: OBRÁZOK GRAFU (PNG), PDF SÚBOR, TLAČ, WEBHOOK, JSON
      * ------------------------------------------------------------- */
+    async function exportChartImage() {
+      const btn = document.getElementById('btn-export-chart');
+      const origHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Pripravujem graf...';
+        btn.disabled = true;
+      }
+
+      try {
+        const stats = calculateSummaryPercentages();
+        const client = auditState.client || 'Zákazka bez čísla';
+        const auditor = currentUser ? currentUser.name : 'Cyril Gergely';
+        const techs = auditState.techs || 'Neuvedené';
+        const dateStr = new Date(auditState.startTime || Date.now()).toLocaleDateString('sk-SK');
+        const totalSec = auditState.startTime ? Math.floor(((auditState.endTime || Date.now()) - auditState.startTime) / 1000) : 0;
+
+        // Vytvorenie offscreen canvasu (800x860 px pre vysoké rozlíšenie)
+        const canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 860;
+        const ctx = canvas.getContext('2d');
+
+        // Pozadie
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Horný tyrkysový akcent
+        const grad = ctx.createLinearGradient(0, 0, 800, 0);
+        grad.addColorStop(0, '#0891b2');
+        grad.addColorStop(1, '#06b6d4');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 800, 6);
+
+        // Hlavička aplikácie
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillText('HVAC FIELD AUDITOR PRO  •  EFEKTIVITA ČASU', 40, 48);
+
+        // Názov zákazky
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 26px -apple-system, BlinkMacSystemFont, sans-serif';
+        const clientTrunc = client.length > 35 ? client.slice(0, 32) + '...' : client;
+        ctx.fillText(clientTrunc, 40, 88);
+
+        // Detaily zákazky (Audítor, technici, dátum, dĺžka)
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '15px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillText(`Audítor: ${auditor}  |  Technici: ${techs}`, 40, 118);
+
+        let subline = `Dátum: ${dateStr}  |  Čas: ${formatHMS(totalSec)}`;
+        if (auditState.pipeMeters) subline += `  |  Rozvody: ${auditState.pipeMeters} m`;
+        if (Array.isArray(auditState.difficulty) && auditState.difficulty.length > 0) {
+          subline += `  |  ${auditState.difficulty.join(', ')}`;
+        }
+        ctx.fillText(subline, 40, 142);
+
+        // Deliaca čiara
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(40, 165);
+        ctx.lineTo(760, 165);
+        ctx.stroke();
+
+        // Kreslenie Donut grafu
+        const centerX = 400;
+        const centerY = 390;
+        const radius = 150;
+        const lineWidth = 46;
+
+        // Podkladový kruh
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        // Segmenty
+        let startAngle = -0.5 * Math.PI;
+        const segments = [
+          { pct: stats.prodPct, color: '#10b981' }, // Zelená (Efektívny)
+          { pct: stats.suppPct, color: '#f59e0b' }, // Žltá (Logistika)
+          { pct: stats.wastePct, color: '#f43f5e' }  // Červená (Prostoje)
+        ];
+
+        segments.forEach(seg => {
+          if (seg.pct > 0) {
+            const angle = (seg.pct / 100) * (2 * Math.PI);
+            ctx.strokeStyle = seg.color;
+            ctx.lineWidth = lineWidth;
+            ctx.lineCap = 'butt';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, startAngle, startAngle + angle);
+            ctx.stroke();
+            startAngle += angle;
+          }
+        });
+
+        // Stredový text grafu
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 56px -apple-system, BlinkMacSystemFont, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${stats.prodPct}%`, centerX, centerY + 12);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillText('EFEKTIVITA', centerX, centerY + 38);
+
+        // Legenda - 3 boxy pod grafom
+        ctx.textAlign = 'left';
+        const boxY = 600;
+        const boxW = 224;
+        const boxH = 90;
+
+        drawPillBox(ctx, 40, boxY, boxW, boxH, '#10b981', 'PRODUKTÍVNA PRÁCA', `${stats.prodPct}%`, formatMS(stats.prodSec));
+        drawPillBox(ctx, 288, boxY, boxW, boxH, '#f59e0b', 'LOGISTIKA & PODPORA', `${stats.suppPct}%`, formatMS(stats.suppSec));
+        drawPillBox(ctx, 536, boxY, boxW, boxH, '#f43f5e', 'PROSTOJE & STRATY', `${stats.wastePct}%`, formatMS(stats.wasteSec));
+
+        // Spodná päta
+        ctx.fillStyle = '#64748b';
+        ctx.font = '13px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Vygenerované cez HVAC Field Auditor PRO • Časovo-technologický audit v teréne', 400, 820);
+        ctx.textAlign = 'left';
+
+        // Prevod canvasu na súbor (Blob -> File)
+        canvas.toBlob(async (blob) => {
+          if (!blob) throw new Error('Nepodarilo sa vytvoriť obrázok grafu');
+          const cleanClient = client.replace(/[^a-zA-Z0-9_\u00C0-\u017F-]/g, '_');
+          const filename = `graf_efektivity_${cleanClient}.png`;
+          const file = new File([blob], filename, { type: 'image/png' });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: `Graf efektivity - ${client}`,
+              text: `Rozpad efektivity montáže (${stats.prodPct}%): ${client}`,
+              files: [file]
+            });
+            showToast('Graf pripravený na odoslanie!');
+          } else {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            showToast('Obrázok grafu bol stiahnutý!');
+          }
+        }, 'image/png');
+
+      } catch (err) {
+        console.error('Chyba exportu grafu:', err);
+        if (err.name !== 'AbortError') {
+          showModal('Chyba exportu', 'Nepodarilo sa vygenerovať obrázok grafu: ' + err.message);
+        }
+      } finally {
+        if (btn) {
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    function drawPillBox(ctx, x, y, w, h, color, title, pct, time) {
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(x, y, w, h, 12);
+      } else {
+        ctx.rect(x, y, w, h);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x + 18, y + 24, 6, 0, 2 * Math.PI);
+      ctx.fill();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillText(title, x + 32, y + 28);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, monospace';
+      ctx.fillText(pct, x + 16, y + 62);
+
+      ctx.fillStyle = color;
+      ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, monospace';
+      ctx.fillText(time, x + 110, y + 60);
+    }
+
+    async function exportDirectPDF() {
+      const btn = document.getElementById('btn-export-pdf');
+      const origHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Pripravujem PDF...';
+        btn.disabled = true;
+      }
+
+      try {
+        renderReportTab();
+        const client = auditState.client || 'Zákazka bez čísla';
+        const cleanClient = client.replace(/[^a-zA-Z0-9_\u00C0-\u017F-]/g, '_');
+        const filename = `Protokol_${cleanClient}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+        const reportEl = document.getElementById('tab-content-report');
+
+        if (typeof html2pdf !== 'undefined') {
+          const noPrintEls = reportEl.querySelectorAll('.no-print');
+          noPrintEls.forEach(el => el.style.display = 'none');
+
+          const opt = {
+            margin: [8, 8, 8, 8],
+            filename: filename,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#090d16' },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+
+          const worker = html2pdf().set(opt).from(reportEl);
+          const pdfBlob = await worker.outputPdf('blob');
+
+          noPrintEls.forEach(el => el.style.display = '');
+
+          const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+          if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+            await navigator.share({
+              title: `Protokol o audite: ${client}`,
+              text: `Protokol o audite montáže - ${client}`,
+              files: [pdfFile]
+            });
+            showToast('PDF protokol pripravený na odoslanie!');
+          } else {
+            worker.save();
+            showToast('PDF protokol bol stiahnutý!');
+          }
+        } else {
+          printProtocol();
+        }
+      } catch (err) {
+        console.error('Chyba PDF exportu:', err);
+        if (err.name !== 'AbortError') {
+          printProtocol();
+        }
+      } finally {
+        if (btn) {
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }
+      }
+    }
+
     function printProtocol() {
       renderReportTab();
       window.print();
@@ -1706,6 +1970,11 @@
       text += `======================================\n\n`;
 
       text += `📊 ROZPAD ČASU (EFEKTIVITA):\n`;
+      const greenBlocks = Math.round(stats.prodPct / 10);
+      const yellowBlocks = Math.round(stats.suppPct / 10);
+      const redBlocks = Math.max(0, 10 - greenBlocks - yellowBlocks);
+      const bar = '🟩'.repeat(greenBlocks) + '🟨'.repeat(yellowBlocks) + '🟥'.repeat(redBlocks);
+      text += `[${bar}] (Efektivita: ${stats.prodPct}%)\n`;
       text += `🟢 Produktívna práca: ${formatMS(stats.prodSec)} (${stats.prodPct}%)\n`;
       text += `🟡 Logistika / Podpora: ${formatMS(stats.suppSec)} (${stats.suppPct}%)\n`;
       text += `🔴 Prostoje / Straty: ${formatMS(stats.wasteSec)} (${stats.wastePct}%)\n\n`;
