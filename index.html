@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HVAC Field Auditor PRO | Audit Technikov</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0891b2">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap');
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Pulzujúci indikátor aktívneho nahrávania */
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.02); }
+    }
+    .active-pulsing {
+      animation: pulse-subtle 2s infinite ease-in-out;
+    }
+
+    /* Zamedzenie nechceného pretiahnutia stránky na iOS */
+    html, body {
+      overscroll-behavior-y: contain;
+    }
+
+    /* Štýl scrollbaru */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+
+    /* Tlačový štýl pre PDF a tlač protokolu */
+    @media print {
+      body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+        padding-bottom: 0 !important;
+      }
+      header, nav, footer, #setup-card, #toast, #custom-modal, .no-print, button, input[type="file"] {
+        display: none !important;
+      }
+      #tab-content-report {
+        display: block !important;
+      }
+      #print-protocol-header {
+        display: block !important;
+      }
+      .print-card {
+        border: 1px solid #cbd5e1 !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        margin-bottom: 12px !important;
+      }
+      .print-text-dark {
+        color: #0f172a !important;
+      }
+      .print-muted {
+        color: #64748b !important;
+      }
+      .print-border {
+        border-color: #e2e8f0 !important;
+      }
+      .print-badge-prod {
+        background: #dcfce7 !important;
+        color: #166534 !important;
+        border: 1px solid #bbf7d0 !important;
+      }
+      .print-badge-supp {
+        background: #fef3c7 !important;
+        color: #92400e !important;
+        border: 1px solid #fde68a !important;
+      }
+      .print-badge-waste {
+        background: #fee2e2 !important;
+        color: #991b1b !important;
+        border: 1px solid #fecaca !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col pb-24 select-none">
+
+  <!-- ================= TOP STICKY BAR: HLAVIČKA A ČASOVAČ ================= -->
+  <header class="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 shadow-lg">
+    <div class="max-w-xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-8 h-8 rounded-lg bg-cyan-600 flex items-center justify-center text-white shadow-md shadow-cyan-600/30">
+          <i class="fa-solid fa-snowflake text-sm"></i>
+        </div>
+        <div>
+          <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
+            HVAC AUDITOR <span class="text-[10px] bg-cyan-500/20 text-cyan-400 font-semibold px-1.5 py-0.5 rounded">PRO</span>
+          </h1>
+          <p id="top-subtext" class="text-xs text-slate-400 truncate max-w-[150px] sm:max-w-xs">Čaká na spustenie</p>
+        </div>
+      </div>
+
+      <!-- Celkový časomer zákazky -->
+      <div class="text-right">
+        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Čas na zákazke</div>
+        <div id="total-timer-display" class="text-xl font-extrabold font-mono-num text-cyan-400 leading-none mt-0.5">
+          00:00:00
+        </div>
+      </div>
+    </div>
+
+    <!-- Aktívna bežiaca činnosť - banner s rýchlou korekciou času -->
+    <div id="active-activity-banner" class="hidden mt-2 p-2.5 rounded-xl border flex items-center justify-between text-xs transition-all shadow-md bg-cyan-950/70 border-cyan-600/50">
+      <div class="flex items-center space-x-2 overflow-hidden mr-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping shrink-0"></span>
+        <div class="truncate">
+          <span class="text-slate-400 text-[10px] block leading-none font-medium">Práve merané:</span>
+          <span id="active-activity-name" class="font-bold text-white truncate text-xs sm:text-sm">Vŕtanie prestupov</span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-1.5 shrink-0">
+        <!-- Tlačidlá rýchlej korekcie času (+/- 1 minúta) -->
+        <button onclick="adjustCurrentActivityTime(-60)" title="Odpočítať 1 minútu" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono-num font-bold text-[10px] border border-slate-700 active:scale-95">
+          -1m
+        </button>
+        <button onclick="adjustCurrentActivityTime(60)" title="Pripočítať 1 minútu" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono-num font-bold text-[10px] border border-slate-700 active:scale-95">
+          +1m
+        </button>
+        <div class="font-mono-num text-sm sm:text-base font-black px-2 py-0.5 rounded bg-slate-900/90 text-cyan-300 border border-cyan-500/30" id="active-activity-timer">
+          00:00
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= HLAVNÝ OBSAH S MODULMI ================= -->
+  <main class="max-w-xl mx-auto w-full px-3 sm:px-4 pt-3 flex-1">
+
+    <!-- Tlačový protokol hlavička (iba pre tlač / PDF) -->
+    <div id="print-protocol-header" class="hidden pb-4 mb-4 border-b border-slate-300 text-black">
+      <div class="flex justify-between items-start">
+        <div>
+          <h1 class="text-2xl font-black uppercase tracking-tight text-slate-900">Protokol o audite montáže / servisu</h1>
+          <p class="text-xs text-slate-600 mt-1">Časovo-technologický audit kvality a efektivity (HVAC Field Auditor PRO)</p>
+        </div>
+        <div class="text-right text-xs text-slate-600">
+          <div class="font-bold">Dátum: <span id="print-date">-</span></div>
+          <div>Vyhotovil: Audítor v teréne</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NAVIGÁCIA MEDZI ZÁLOŽKAMI (na mobile skrytá pri tlači) -->
+    <nav class="grid grid-cols-3 gap-1 p-1 bg-slate-900 rounded-xl border border-slate-800 mb-3 text-xs font-semibold no-print">
+      <button id="tab-btn-tracker" onclick="switchTab('tracker')" class="py-2.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all bg-cyan-600 text-white shadow-sm">
+        <i class="fa-solid fa-stopwatch"></i> Činnosti
+      </button>
+      <button id="tab-btn-checklist" onclick="switchTab('checklist')" class="py-2.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white">
+        <i class="fa-solid fa-list-check"></i> Postup (<span id="checklist-counter">0/13</span>)
+      </button>
+      <button id="tab-btn-report" onclick="switchTab('report')" class="py-2.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white">
+        <i class="fa-solid fa-chart-pie"></i> Report
+      </button>
+    </nav>
+
+    <!-- ================= 1. TAB: ČINNOSTI & SETUP ================= -->
+    <section id="tab-content-tracker" class="space-y-3">
+
+      <!-- Setup audit karty (kollapsovateľné po štarte) -->
+      <div id="setup-card" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm transition-all">
+        <div class="flex items-center justify-between mb-2 cursor-pointer" onclick="toggleSetupCollapse()">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-sliders text-cyan-400"></i> Nastavenie auditu & Zákazka
+          </div>
+          <button type="button" class="text-slate-400 hover:text-white text-xs">
+            <i id="setup-collapse-icon" class="fa-solid fa-chevron-up"></i>
+          </button>
+        </div>
+
+        <div id="setup-fields" class="space-y-2.5 text-xs">
+          <!-- Klient / Číslo zákazky -->
+          <div>
+            <label class="block text-slate-400 text-[11px] mb-1 font-medium">Zákazka / Klient / Miesto</label>
+            <input type="text" id="input-client" placeholder="Napr. ZAK-2026-089 / Ing. Novák (Bratislava)" 
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+          </div>
+
+          <!-- Výber technikov -->
+          <div>
+            <label class="block text-slate-400 text-[11px] mb-1 font-medium">Auditovaní technici</label>
+            <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+              <button type="button" onclick="selectPresetTech('Marko & Šimek')" class="border border-slate-700 bg-slate-950/60 hover:bg-slate-800 rounded-lg p-2 text-left font-medium text-slate-200">
+                Marko & Šimek
+              </button>
+              <button type="button" onclick="selectPresetTech('Janči Pavlík')" class="border border-slate-700 bg-slate-950/60 hover:bg-slate-800 rounded-lg p-2 text-left font-medium text-slate-200">
+                Janči Pavlík
+              </button>
+            </div>
+            <input type="text" id="input-techs" placeholder="Alebo zadaj iné mená technikov..." 
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+          </div>
+
+          <!-- Typ zásahu -->
+          <div>
+            <label class="block text-slate-400 text-[11px] mb-1 font-medium">Typ zásahu</label>
+            <select id="select-job-type" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+              <option value="Montáž novej klimatizácie">Montáž novej klimatizácie</option>
+              <option value="Pravidelný servis & čistenie">Pravidelný servis & čistenie</option>
+              <option value="Diagnostika a oprava poruchy">Diagnostika a oprava poruchy</option>
+            </select>
+          </div>
+
+          <!-- Webhook URL (Voliteľné) -->
+          <div class="pt-1 border-t border-slate-800/80">
+            <details class="text-[11px] text-slate-400">
+              <summary class="cursor-pointer hover:text-slate-200 font-medium py-1 flex items-center justify-between">
+                <span><i class="fa-solid fa-network-wired text-cyan-400 mr-1"></i> Webhook integrácia (Google Sheets / Make)</span>
+                <i class="fa-solid fa-chevron-down text-[10px]"></i>
+              </summary>
+              <div class="pt-2 space-y-1.5">
+                <input type="url" id="input-webhook-url" placeholder="https://hook.eu1.make.com/... alebo Google Script URL"
+                       class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+                       onchange="saveWebhookUrl(this.value)">
+                <p class="text-[10px] text-slate-500 leading-tight">Po ukončení auditu odošle kompletné JSON dáta (časy, checklist, poznámky) na túto adresu.</p>
+              </div>
+            </details>
+          </div>
+
+          <!-- Tlačidlá Štart / Stop auditu -->
+          <div class="pt-2 flex gap-2">
+            <button id="btn-start-audit" onclick="startAudit()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 text-sm transition-all active:scale-95">
+              <i class="fa-solid fa-play"></i> SPUSTIŤ AUDIT (PRÍCHOD)
+            </button>
+            <button id="btn-stop-audit" onclick="finishAuditModal()" class="hidden flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-rose-600/30 flex items-center justify-center gap-2 text-sm transition-all active:scale-95">
+              <i class="fa-solid fa-flag-checkered"></i> UKONČIŤ AUDIT
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rýchly sumár kategórií (Progress Bar) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
+        <div class="flex justify-between items-center text-xs mb-1.5 font-medium">
+          <span class="text-slate-400 font-semibold uppercase text-[10px]">Pomer časov v reálnom čase</span>
+          <div class="flex space-x-3 text-[11px]">
+            <span class="text-emerald-400 font-mono-num font-bold">🟢 <span id="summary-prod-pct">0%</span></span>
+            <span class="text-amber-400 font-mono-num font-bold">🟡 <span id="summary-supp-pct">0%</span></span>
+            <span class="text-rose-400 font-mono-num font-bold">🔴 <span id="summary-waste-pct">0%</span></span>
+          </div>
+        </div>
+        <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden flex border border-slate-800">
+          <div id="bar-prod" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%"></div>
+          <div id="bar-supp" class="bg-amber-500 h-full transition-all duration-300" style="width: 0%"></div>
+          <div id="bar-waste" class="bg-rose-500 h-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Kategórie činností -->
+      <div class="space-y-3">
+
+        <!-- 🟢 Kategória 1: Produktívna práca -->
+        <div class="rounded-xl border border-emerald-900/40 bg-emerald-950/10 p-2.5">
+          <div class="flex items-center justify-between text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 px-1">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-wrench"></i> Produktívna práca</span>
+            <span id="cat-prod-total" class="font-mono-num font-extrabold text-sm text-emerald-300">00:00:00</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5" id="activities-productive-container">
+            <!-- Vygenerované cez JS -->
+          </div>
+        </div>
+
+        <!-- 🟡 Kategória 2: Podporné činnosti & Logistika -->
+        <div class="rounded-xl border border-amber-900/40 bg-amber-950/10 p-2.5">
+          <div class="flex items-center justify-between text-xs font-bold text-amber-400 uppercase tracking-wider mb-2 px-1">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-truck-ramp-box"></i> Logistika & Organizácia</span>
+            <span id="cat-supp-total" class="font-mono-num font-extrabold text-sm text-amber-300">00:00:00</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5" id="activities-support-container">
+            <!-- Vygenerované cez JS -->
+          </div>
+        </div>
+
+        <!-- 🔴 Kategória 3: Prostoje a straty (Waste) -->
+        <div class="rounded-xl border border-rose-900/40 bg-rose-950/10 p-2.5">
+          <div class="flex items-center justify-between text-xs font-bold text-rose-400 uppercase tracking-wider mb-2 px-1">
+            <span class="flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Prostoje & Neefektívny čas</span>
+            <span id="cat-waste-total" class="font-mono-num font-extrabold text-sm text-rose-300">00:00:00</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5" id="activities-waste-container">
+            <!-- Vygenerované cez JS -->
+          </div>
+        </div>
+
+        <!-- Tlačidlo pauzy / stop merania aktuálnej činnosti -->
+        <div class="pt-1">
+          <button id="btn-stop-current-act" onclick="stopCurrentActivity()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all">
+            <i class="fa-solid fa-pause"></i> Pozastaviť meranie činnosti (Žiadna neprebieha)
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 2. TAB: CHECKLIST POSTUPOV ================= -->
+    <section id="tab-content-checklist" class="hidden space-y-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-check text-cyan-400"></i> Technologický audit kvality
+            </h2>
+            <p class="text-[11px] text-slate-400">Overuj kľúčové zásady správnej montáže, bezpečnosti a čistoty</p>
+          </div>
+          <div class="text-right">
+            <span id="checklist-summary-badge" class="text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-slate-300">
+              0 z 13
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zoznam kontrolných položiek s fotkami a poznámkami -->
+      <div id="checklist-items-container" class="space-y-2.5">
+        <!-- Generované v JS -->
+      </div>
+    </section>
+
+    <!-- ================= 3. TAB: REPORT & ŠTATISTIKA ================= -->
+    <section id="tab-content-report" class="hidden space-y-3">
+      
+      <!-- Karta stavu zákazky -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 print-card">
+        <div class="flex items-start justify-between border-b border-slate-800 pb-3 mb-3 print-border">
+          <div>
+            <span class="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Súhrnný audit report</span>
+            <h2 id="report-client-name" class="text-base font-extrabold text-white mt-0.5 print-text-dark">Zákazka neurčená</h2>
+            <p id="report-techs-name" class="text-xs text-slate-400 print-muted">Technici: -</p>
+          </div>
+          <div class="text-right">
+            <span id="report-job-badge" class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-medium">Montáž</span>
+            <div id="report-total-time" class="text-lg font-black font-mono-num text-cyan-400 mt-1 print-text-dark">00:00:00</div>
+          </div>
+        </div>
+
+        <!-- 3 piliere času -->
+        <div class="grid grid-cols-3 gap-2 text-center mb-4">
+          <div class="bg-emerald-950/30 border border-emerald-900/40 p-2.5 rounded-xl print-badge-prod">
+            <div class="text-[10px] font-bold text-emerald-400 uppercase">Efektívny</div>
+            <div id="report-prod-time" class="text-sm sm:text-base font-mono-num font-extrabold text-emerald-300">00:00</div>
+            <div id="report-prod-share" class="text-[10px] text-emerald-400 font-bold">0%</div>
+          </div>
+          <div class="bg-amber-950/30 border border-amber-900/40 p-2.5 rounded-xl print-badge-supp">
+            <div class="text-[10px] font-bold text-amber-400 uppercase">Logistika</div>
+            <div id="report-supp-time" class="text-sm sm:text-base font-mono-num font-extrabold text-amber-300">00:00</div>
+            <div id="report-supp-share" class="text-[10px] text-amber-400 font-bold">0%</div>
+          </div>
+          <div class="bg-rose-950/30 border border-rose-900/40 p-2.5 rounded-xl print-badge-waste">
+            <div class="text-[10px] font-bold text-rose-400 uppercase">Prostoje</div>
+            <div id="report-waste-time" class="text-sm sm:text-base font-mono-num font-extrabold text-rose-300">00:00</div>
+            <div id="report-waste-share" class="text-[10px] text-rose-400 font-bold">0%</div>
+          </div>
+        </div>
+
+        <!-- VIZUÁLNY KOLÁČOVÝ GRAF (SVG DONUT CHART) -->
+        <div class="mb-4 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 print-card">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2 flex items-center justify-between">
+            <span>Grafický rozpad času (Time & Motion)</span>
+            <span class="text-[10px] text-slate-400">Efektívny vs. Neefektívny</span>
+          </div>
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-4 py-1">
+            <!-- SVG Donut Chart -->
+            <div class="relative w-36 h-36 shrink-0 flex items-center justify-center">
+              <svg id="pie-chart-svg" class="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" fill="transparent" stroke="#1e293b" stroke-width="14" />
+                <circle id="pie-prod-circle" cx="50" cy="50" r="40" fill="transparent" stroke="#10b981" stroke-width="14" stroke-dasharray="0 251.2" stroke-dashoffset="0" />
+                <circle id="pie-supp-circle" cx="50" cy="50" r="40" fill="transparent" stroke="#f59e0b" stroke-width="14" stroke-dasharray="0 251.2" stroke-dashoffset="0" />
+                <circle id="pie-waste-circle" cx="50" cy="50" r="40" fill="transparent" stroke="#f43f5e" stroke-width="14" stroke-dasharray="0 251.2" stroke-dashoffset="0" />
+              </svg>
+              <div class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                <span id="pie-center-pct" class="text-xl font-black font-mono-num text-white print-text-dark">0%</span>
+                <span class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Efektivita</span>
+              </div>
+            </div>
+            <!-- Legenda ku grafu -->
+            <div class="space-y-1.5 text-xs w-full sm:w-auto">
+              <div class="flex items-center justify-between gap-4 p-1 rounded bg-slate-900/60">
+                <span class="flex items-center gap-1.5 font-medium text-emerald-400"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Produktívna práca</span>
+                <span id="pie-legend-prod" class="font-mono-num font-bold text-slate-200">0 min (0%)</span>
+              </div>
+              <div class="flex items-center justify-between gap-4 p-1 rounded bg-slate-900/60">
+                <span class="flex items-center gap-1.5 font-medium text-amber-400"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Logistika & Hľadanie</span>
+                <span id="pie-legend-supp" class="font-mono-num font-bold text-slate-200">0 min (0%)</span>
+              </div>
+              <div class="flex items-center justify-between gap-4 p-1 rounded bg-slate-900/60">
+                <span class="flex items-center gap-1.5 font-medium text-rose-400"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Prostoje & Straty</span>
+                <span id="pie-legend-waste" class="font-mono-num font-bold text-slate-200">0 min (0%)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailný Breakdown TOP činností -->
+        <div class="mb-4">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center justify-between print-text-dark">
+            <span>Rozpad podľa aktivít</span>
+            <span class="text-[10px] text-slate-500 font-normal">zoradené podľa dĺžky trvania</span>
+          </h3>
+          <div id="report-activities-list" class="space-y-1.5 text-xs">
+            <!-- Dynamicky naplnené -->
+          </div>
+        </div>
+
+        <!-- CHRONOLOGICKÁ ČASOVÁ OS (TIMELINE) -->
+        <div class="mb-4">
+          <details class="text-xs">
+            <summary class="cursor-pointer font-bold text-slate-300 uppercase tracking-wider py-1 flex items-center justify-between hover:text-white print-text-dark">
+              <span><i class="fa-solid fa-timeline text-cyan-400 mr-1.5"></i> Chronologický denník zákazky</span>
+              <span id="timeline-count-badge" class="text-[10px] text-slate-400 font-normal">0 segmentov</span>
+            </summary>
+            <div id="report-timeline-container" class="mt-2 space-y-1 text-xs border-l-2 border-slate-800 pl-3">
+              <!-- Dynamicky naplnené položky časovej osi -->
+            </div>
+          </details>
+        </div>
+
+        <!-- Výsledok auditu postupov (porušené body & fotky) -->
+        <div class="mb-4">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center justify-between print-text-dark">
+            <span>Kontrola technologických postupov a fotodokumentácia</span>
+            <span id="report-checklist-stats" class="text-[10px] font-bold"></span>
+          </h3>
+          <div id="report-checklist-issues" class="space-y-2 text-xs">
+            <!-- Dynamicky naplnené chyby aj fotky -->
+          </div>
+        </div>
+
+        <!-- Poznámky audítora -->
+        <div class="mb-4">
+          <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 print-text-dark">Záverečné odporúčanie & Poznámky audítora</label>
+          <textarea id="auditor-general-notes" rows="3" placeholder="Zadaj celkový dojem, odporúčania na doškolenie technikov, stav náradia v aute..." 
+                    class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"></textarea>
+        </div>
+
+        <!-- Podpisy pre tlačový protokol (iba print) -->
+        <div class="hidden print:grid grid-cols-2 gap-8 pt-8 mt-6 border-t border-slate-300 text-xs">
+          <div class="border-t border-slate-400 pt-2">
+            Podpis audítora: ___________________
+          </div>
+          <div class="border-t border-slate-400 pt-2">
+            Podpis vedúceho technika: ___________________
+          </div>
+        </div>
+
+        <!-- Akčné tlačidlá reportu -->
+        <div class="space-y-2 no-print pt-2">
+          <!-- Hlavné mobilné exporty -->
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="printProtocol()" class="py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95">
+              <i class="fa-solid fa-file-pdf"></i> Tlač / PDF protokol
+            </button>
+            <button onclick="shareReportEmail()" class="py-2.5 px-3 bg-blue-600 hover:bg-blue-500 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95">
+              <i class="fa-solid fa-envelope"></i> Odoslať E-mailom
+            </button>
+          </div>
+
+          <div class="grid grid-cols-3 gap-1.5">
+            <button onclick="shareReportNative()" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-200 font-semibold text-[11px] flex items-center justify-center gap-1 transition-all">
+              <i class="fa-solid fa-arrow-up-from-bracket text-sky-400"></i> Zdieľať (iOS)
+            </button>
+            <button onclick="copyReportToClipboard()" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-200 font-semibold text-[11px] flex items-center justify-center gap-1 transition-all">
+              <i class="fa-regular fa-copy text-cyan-400"></i> Kopírovať
+            </button>
+            <button onclick="exportAuditJSON()" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-200 font-semibold text-[11px] flex items-center justify-center gap-1 transition-all">
+              <i class="fa-solid fa-download text-emerald-400"></i> JSON
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button onclick="triggerWebhookExport()" id="btn-webhook-export" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-indigo-300 font-semibold text-[11px] flex items-center justify-center gap-1 transition-all">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Webhook odoslanie
+            </button>
+            <button onclick="saveAndResetAuditModal()" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-rose-300 font-semibold text-[11px] flex items-center justify-center gap-1 transition-all">
+              <i class="fa-solid fa-rotate-left"></i> Nový audit
+            </button>
+          </div>
+
+          <!-- Nápoveda pre iPhone PDF -->
+          <div class="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
+            <i class="fa-brands fa-apple text-slate-300 text-sm mt-0.5"></i>
+            <div>
+              <span class="font-bold text-slate-300">Tip pre iPhone / Apple:</span> 
+              Pri voľbe <b>Tlač / PDF</b> v náhľade tlače roztiahnite stranu 2 prstami (pinch-to-zoom) – vygeneruje sa PDF súbor so všetkými fotkami, ktorý cez ikonu Zdieľať pošlete do Mailu.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- História auditov z pamäte -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 no-print">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">História uložených auditov</h3>
+          <button onclick="clearHistory()" class="text-[10px] text-rose-400 hover:underline">Vymazať históriu</button>
+        </div>
+        <div id="history-list" class="space-y-2 text-xs">
+          <p class="text-slate-500 italic">Zatiaľ žiadne uložené audity.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= SPODNÁ PLÁVAJÚCA AKČNÁ LIŠTA NA MOBIL ================= -->
+  <footer class="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/90 backdrop-blur-md border-t border-slate-800 px-4 py-2 no-print">
+    <div class="max-w-xl mx-auto flex items-center justify-between text-xs">
+      <div class="flex items-center gap-2">
+        <span id="footer-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+        <span id="footer-status-text" class="text-slate-400 font-medium">Audit nepustený</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="quickAddNoteModal()" class="px-3 py-1.5 bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-lg text-slate-200 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all">
+          <i class="fa-regular fa-note-sticky text-amber-400"></i> Rýchla poznámka
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ================= UNIVERZÁLNY MODAL (BEZ ALERTU) ================= -->
+  <div id="custom-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-4 shadow-2xl space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <h3 id="modal-title" class="font-bold text-sm text-white flex items-center gap-2">Upozornenie</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="modal-body" class="text-xs text-slate-300 leading-relaxed">
+        Obsah modalu
+      </div>
+      <div id="modal-actions" class="flex gap-2 justify-end pt-1">
+        <button onclick="closeModal()" class="px-4 py-2 bg-slate-800 rounded-lg text-xs font-semibold text-slate-300">Zavrieť</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL NA ZVÄČŠENÝ NÁHĽAD FOTKY -->
+  <div id="photo-preview-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4" onclick="closePhotoModal()">
+    <div class="relative max-w-lg w-full max-h-[85vh] flex flex-col items-center" onclick="event.stopPropagation()">
+      <div class="w-full flex justify-between items-center mb-2 px-1">
+        <span id="photo-modal-caption" class="text-xs font-bold text-white">Náhľad fotografie</span>
+        <button onclick="closePhotoModal()" class="w-7 h-7 bg-slate-800 rounded-full text-white flex items-center justify-center hover:bg-slate-700">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <img id="photo-modal-img" src="" alt="Detail fotky" class="w-full max-h-[75vh] object-contain rounded-xl border border-slate-800 shadow-2xl bg-slate-950">
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFIKÁCIA -->
+  <div id="toast" class="hidden fixed bottom-14 left-1/2 -translate-x-1/2 z-50 bg-cyan-600 text-white font-medium text-xs px-4 py-2 rounded-full shadow-lg border border-cyan-400/30 transition-all flex items-center gap-2">
+    <i class="fa-solid fa-check"></i> <span id="toast-text">Akcia úspešná</span>
+  </div>
+
+  <!-- ================= LOGIKA APLIKÁCIE ================= -->
+  <script>
+    /* -------------------------------------------------------------
+     * DÁTOVÝ MODEL A DEFINÍCIA AKTIVÍT (HVAC ŠPECIFIKÁCIA)
+     * ------------------------------------------------------------- */
+    const ACTIVITIES_DEF = [
+      // 🟢 PRODUKTÍVNA PRÁCA (8 činností)
+      { id: 'prep_tools', name: 'Príprava miesta & prenos náradia/jednotiek', category: 'prod', icon: 'fa-dolly' },
+      { id: 'drilling', name: 'Jadrové / bežné vŕtanie prestupov', category: 'prod', icon: 'fa-bore-hole' },
+      { id: 'bracket_mount', name: 'Montáž konzoly (vnútorná / vonkajšia)', category: 'prod', icon: 'fa-ruler-combined' },
+      { id: 'pipe_routing', name: 'Ťahanie trubiek, elektroinštalácie a kondenzu', category: 'prod', icon: 'fa-arrows-split-up-and-left' },
+      { id: 'flaring', name: 'Kalíškovanie a spájanie potrubia', category: 'prod', icon: 'fa-screwdriver-wrench' },
+      { id: 'pressure_vac', name: 'Tlaková skúška dusíkom & vákuovanie', category: 'prod', icon: 'fa-gauge-high' },
+      { id: 'electrical_test', name: 'Elektroinštalácia, oživenie & meranie', category: 'prod', icon: 'fa-bolt' },
+      { id: 'client_training', name: 'Zaškolenie zákazníka & odovzdanie', category: 'prod', icon: 'fa-handshake' },
+      
+      // 🟡 PODPORNÉ ČINNOSTI & LOGISTIKA (3 činnosti)
+      { id: 'van_search', name: 'Hľadanie náradia / materiálu v dodávke', category: 'supp', icon: 'fa-magnifying-glass' },
+      { id: 'discussion', name: 'Riešenie postupu / projekt / debata na stavbe', category: 'supp', icon: 'fa-comments' },
+      { id: 'work_calls', name: 'Pracovný hovor (zákazník, sklad, podpora)', category: 'supp', icon: 'fa-phone' },
+
+      // 🔴 NEEFEKTÍVNY ČAS & PROSTOJE (WASTE) (4 činnosti)
+      { id: 'waiting', name: 'Čakanie (na sprístupnenie, na parťáka)', category: 'waste', icon: 'fa-hourglass-half' },
+      { id: 'store_run', name: 'Výjazd do stavebnín / veľkoobchodu', category: 'waste', icon: 'fa-van-shuttle' },
+      { id: 'personal_breaks', name: 'Osobné prestávky (cigareta, káva, mobil)', category: 'waste', icon: 'fa-mug-hot' },
+      { id: 'rework', name: 'Oprava vlastnej chyby / prerábka', category: 'waste', icon: 'fa-rotate-left' }
+    ];
+
+    // 13 Kľúčových technologických auditných bodov
+    const CHECKLIST_DEF = [
+      { id: 'c_consult', title: '1. Odsúhlasenie montáže so zákazníkom', desc: 'Prejdenie a schválenie umiestnenia jednotiek, trasy chladiva, elektroinštalácie a odvodu kondenzu.' },
+      { id: 'c_docs', title: '2. Podpis dokumentácie pred montážou', desc: 'Podpísanie montážneho listu / zameracieho protokolu zákazníkom pred začatím prác.' },
+      { id: 'c1', title: '3. Ochrana interiéru & OOPP', desc: 'Fólie na nábytku/podlahe, ochranné návleky a pracovné pomôcky.' },
+      { id: 'c2', title: '4. Detektor skrytých vedení', desc: 'Kontrola steny detektorom pred vŕtaním (elektrina, voda, armatúry).' },
+      { id: 'c3', title: '5. Použitie vodováhy na vnútornej jednotke', desc: 'Presná rovina alebo jemný spád k vývodu kondenzu.' },
+      { id: 'c4', title: '6. Kotvenie vonkajšej jednotky & silentbloky', desc: 'Pevné ukotvenie konzoly, použitie antivibračných podložiek.' },
+      { id: 'c5', title: '7. Odhrotovanie medeného potrubia', desc: 'Dôkladné vystruženie/odhrotovanie po rezaní pred samotným kalíškovaním.' },
+      { id: 'c6', title: '8. Momentový kľúč pri uťahovaní', desc: 'Uťahovanie momentovým kľúčom podľa predpísaného priemeru trubky.' },
+      { id: 'c7', title: '9. Tlaková skúška dusíkom', desc: 'Overenie tesnosti okruhu suchým dusíkom (aspoň 20-30 bar, udržanie).' },
+      { id: 'c8', title: '10. Vákuovanie digitálnym vákuometrom', desc: 'Dosiahnutie tlaku pod 500 mikrónov a test udržania vákua (decay test).' },
+      { id: 'c9', title: '11. Spádovanie a SKÚŠKA PRELIATÍM KONDENZU', desc: 'Povinná fyzická skúška naliatím aspoň 0.5L vody a kontrola plynulého odtoku.' },
+      { id: 'c10', title: '12. Lisovacie dutinky na elektro vodičoch', desc: 'Použitie dutiniek na lankových kábloch a pevné dotiahnutie svoriek.' },
+      { id: 'c11', title: '13. Záverečné povysávanie a čistota', desc: 'Upratanie prachu po vŕtaní, vynesenie obalov a zanechanie čistoty.' }
+    ];
+
+    /* -------------------------------------------------------------
+     * STAV APLIKÁCIE (OFFLINE & LOCALSTORAGE READY)
+     * ------------------------------------------------------------- */
+    let auditState = {
+      isStarted: false,
+      startTime: null,
+      endTime: null,
+      client: '',
+      techs: '',
+      jobType: 'Montáž novej klimatizácie',
+      webhookUrl: '',
+      currentActivityId: null,
+      activityStartTimestamp: null,
+      durations: {}, // { activityId: sekundy }
+      occurrences: {}, // { activityId: počet_spustení }
+      timeline: [], // [ { id, activityId, name, category, startTime, endTime, durationSec } ]
+      checklistStatus: {}, // { c1: 'pass' | 'fail' | 'na' }
+      checklistNotes: {}, // { c1: 'poznámka' }
+      checklistPhotos: {}, // { c1: 'data:image/jpeg;base64,...' }
+      generalNotes: ''
+    };
+
+    // Inicializácia počítadiel
+    ACTIVITIES_DEF.forEach(a => {
+      auditState.durations[a.id] = 0;
+      auditState.occurrences[a.id] = 0;
+    });
+
+    let mainTimerInterval = null;
+
+    /* -------------------------------------------------------------
+     * INICIALIZÁCIA PO NAČÍTANÍ STRÁNKY
+     * ------------------------------------------------------------- */
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSavedState();
+      renderActivityButtons();
+      renderChecklist();
+      updateDisplay();
+      renderHistory();
+
+      if (auditState.isStarted) {
+        startTimerLoops();
+      }
+
+      // Registrácia PWA Service Workeru pre offline beh
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(err => {
+          console.log('PWA Service Worker offline registrácia:', err);
+        });
+      }
+    });
+
+    /* -------------------------------------------------------------
+     * RENDEROVANIE TLAČIDIEL ČINNOSTÍ
+     * ------------------------------------------------------------- */
+    function renderActivityButtons() {
+      const prodContainer = document.getElementById('activities-productive-container');
+      const suppContainer = document.getElementById('activities-support-container');
+      const wasteContainer = document.getElementById('activities-waste-container');
+
+      prodContainer.innerHTML = '';
+      suppContainer.innerHTML = '';
+      wasteContainer.innerHTML = '';
+
+      ACTIVITIES_DEF.forEach(act => {
+        const btn = document.createElement('button');
+        btn.id = `act-btn-${act.id}`;
+        btn.type = 'button';
+        btn.onclick = () => triggerActivity(act.id);
+
+        let accentTag = 'text-slate-400';
+        if (act.category === 'prod') accentTag = 'text-emerald-400';
+        else if (act.category === 'supp') accentTag = 'text-amber-400';
+        else accentTag = 'text-rose-400';
+
+        btn.className = `activity-button relative flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800 text-slate-200 transition-all duration-150 text-left active:scale-[0.98]`;
+        
+        btn.innerHTML = `
+          <div class="flex items-center space-x-2.5 overflow-hidden">
+            <div class="w-7 h-7 rounded-lg bg-slate-950 flex items-center justify-center ${accentTag} shrink-0 text-xs shadow-inner">
+              <i class="fa-solid ${act.icon}"></i>
+            </div>
+            <div class="truncate">
+              <div class="text-xs font-semibold text-slate-100 truncate">${act.name}</div>
+              <div class="text-[10px] text-slate-400 flex items-center gap-1.5">
+                <span id="act-count-${act.id}" class="bg-slate-800 px-1 rounded text-slate-300">0x</span>
+                <span id="act-hint-${act.id}" class="text-slate-500">Klikni pre štart</span>
+              </div>
+            </div>
+          </div>
+          <div class="text-right pl-2 shrink-0">
+            <div id="act-time-${act.id}" class="font-mono-num font-bold text-xs sm:text-sm text-slate-300">00:00</div>
+          </div>
+        `;
+
+        if (act.category === 'prod') prodContainer.appendChild(btn);
+        else if (act.category === 'supp') suppContainer.appendChild(btn);
+        else wasteContainer.appendChild(btn);
+      });
+    }
+
+    /* -------------------------------------------------------------
+     * RENDEROVANIE CHECKLISTU S FOTKAMI A POZNÁMKAMI
+     * ------------------------------------------------------------- */
+    function renderChecklist() {
+      const container = document.getElementById('checklist-items-container');
+      container.innerHTML = '';
+
+      CHECKLIST_DEF.forEach(item => {
+        const currentStatus = auditState.checklistStatus[item.id] || null;
+        const currentNote = auditState.checklistNotes[item.id] || '';
+        const currentPhoto = auditState.checklistPhotos[item.id] || null;
+
+        const card = document.createElement('div');
+        card.id = `check-card-${item.id}`;
+        card.className = `p-3 rounded-xl border transition-all ${getStatusCardBorder(currentStatus)}`;
+
+        card.innerHTML = `
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div>
+              <h4 class="text-xs font-bold text-white flex items-center gap-1.5">
+                ${getStatusIcon(currentStatus)}
+                ${item.title}
+              </h4>
+              <p class="text-[11px] text-slate-400 mt-0.5 leading-tight">${item.desc}</p>
+            </div>
+            
+            <!-- Tlačidlá voľby hodnotenia -->
+            <div class="grid grid-cols-3 gap-1 shrink-0 self-end sm:self-center">
+              <button onclick="setChecklistStatus('${item.id}', 'pass')" 
+                      class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${currentStatus === 'pass' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-900/40'}">
+                <i class="fa-solid fa-check"></i> OK
+              </button>
+              <button onclick="setChecklistStatus('${item.id}', 'fail')" 
+                      class="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${currentStatus === 'fail' ? 'bg-rose-600 text-white shadow-md' : 'bg-slate-800 hover:bg-slate-700 text-rose-400 border border-rose-900/40'}">
+                <i class="fa-solid fa-xmark"></i> CHYBA
+              </button>
+              <button onclick="setChecklistStatus('${item.id}', 'na')" 
+                      class="px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${currentStatus === 'na' ? 'bg-slate-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700'}">
+                N/A
+              </button>
+            </div>
+          </div>
+
+          <!-- Rýchle pole pre poznámku a fotku -->
+          <div class="mt-2 pt-2 border-t border-slate-800/80 flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <input type="text" 
+                     value="${escapeHtml(currentNote)}" 
+                     placeholder="Poznámka / detail zistenia..." 
+                     onchange="setChecklistNote('${item.id}', this.value)"
+                     class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500">
+              
+              <!-- Tlačidlo fotoaparátu / uploadu fotky -->
+              <label class="cursor-pointer px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 text-xs flex items-center gap-1.5 shrink-0 transition-all active:scale-95">
+                <i class="fa-solid fa-camera text-cyan-400"></i>
+                <span class="text-[11px] font-medium hidden sm:inline">${currentPhoto ? 'Zmeniť' : 'Odfotiť'}</span>
+                <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoUpload('${item.id}', this)">
+              </label>
+            </div>
+
+            <!-- Náhľad uloženej fotky -->
+            ${currentPhoto ? `
+              <div class="flex items-center gap-2 p-1.5 bg-slate-950/80 border border-slate-800 rounded-lg">
+                <img src="${currentPhoto}" onclick="openPhotoModal('${item.id}')" alt="Náhľad" class="w-12 h-12 object-cover rounded-md cursor-pointer border border-slate-700 hover:opacity-90">
+                <div class="text-[11px] text-slate-400 flex-1 truncate">
+                  <span class="text-cyan-400 font-semibold">Fotka priložená</span> (klikni pre zväčšenie)
+                </div>
+                <button type="button" onclick="deleteChecklistPhoto('${item.id}')" class="px-2 py-1 text-rose-400 hover:text-rose-300 text-xs">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      updateChecklistBadge();
+    }
+
+    function getStatusCardBorder(status) {
+      if (status === 'pass') return 'bg-slate-900/90 border-emerald-800/40';
+      if (status === 'fail') return 'bg-rose-950/20 border-rose-800/60';
+      if (status === 'na') return 'bg-slate-900/50 border-slate-800';
+      return 'bg-slate-900 border-slate-800';
+    }
+
+    function getStatusIcon(status) {
+      if (status === 'pass') return '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+      if (status === 'fail') return '<i class="fa-solid fa-circle-xmark text-rose-400"></i>';
+      if (status === 'na') return '<i class="fa-solid fa-circle-minus text-slate-500"></i>';
+      return '<i class="fa-regular fa-circle text-slate-600"></i>';
+    }
+
+    function setChecklistStatus(id, status) {
+      auditState.checklistStatus[id] = status;
+      saveState();
+      renderChecklist();
+      showToast(status === 'pass' ? 'Bod označený ako dodržaný' : (status === 'fail' ? 'Zaznamenané porušenie postupu!' : 'Označené ako N/A'));
+    }
+
+    function setChecklistNote(id, note) {
+      auditState.checklistNotes[id] = note;
+      saveState();
+    }
+
+    /* -------------------------------------------------------------
+     * FOTODOKUMENTÁCIA (KOMPRESIA NA CANVAS & UKLADANIE)
+     * ------------------------------------------------------------- */
+    function handlePhotoUpload(checkId, inputElement) {
+      const file = inputElement.files && inputElement.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          // Kompresia rozlíšenia na max 800px pre úsporu LocalStorage
+          const maxDim = 800;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+
+          // Uloženie ako optimalizovaný JPEG s kvalitou 0.7
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          auditState.checklistPhotos[checkId] = compressedDataUrl;
+          saveState();
+          renderChecklist();
+          showToast('Fotografia bola úspešne priložená!');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function deleteChecklistPhoto(checkId) {
+      delete auditState.checklistPhotos[checkId];
+      saveState();
+      renderChecklist();
+      showToast('Fotka bola odstránená');
+    }
+
+    function openPhotoModal(checkId) {
+      const dataUrl = auditState.checklistPhotos[checkId];
+      if (!dataUrl) return;
+      const item = CHECKLIST_DEF.find(c => c.id === checkId);
+      document.getElementById('photo-modal-caption').innerText = item ? item.title : 'Fotografia k auditu';
+      document.getElementById('photo-modal-img').src = dataUrl;
+      document.getElementById('photo-preview-modal').classList.remove('hidden');
+    }
+
+    function closePhotoModal() {
+      document.getElementById('photo-preview-modal').classList.add('hidden');
+    }
+
+    function updateChecklistBadge() {
+      const total = CHECKLIST_DEF.length;
+      const checked = Object.keys(auditState.checklistStatus).length;
+      document.getElementById('checklist-counter').innerText = `${checked}/${total}`;
+      const badge = document.getElementById('checklist-summary-badge');
+      if (badge) {
+        badge.innerText = `${checked} z ${total} skontrolované`;
+        if (checked === total) {
+          badge.className = 'text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-950 text-emerald-300 border border-emerald-800';
+        } else {
+          badge.className = 'text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-slate-300';
+        }
+      }
+    }
+
+    /* -------------------------------------------------------------
+     * CORE STOPKY: MERANIE, PREPÍNANIE, TIMELINE & KOREKCIA
+     * ------------------------------------------------------------- */
+    function triggerActivity(actId) {
+      if (!auditState.isStarted) {
+        showModal('Audit ešte nie je spustený', 'Pred meraním činností najprv stlač zelené tlačidlo <b>"SPUSTIŤ AUDIT (PRÍCHOD)"</b> v hornom paneli nastavenia.');
+        return;
+      }
+
+      const now = Date.now();
+
+      // Ak klikol na tú istú činnosť, ktorá už beží -> pozastaviť
+      if (auditState.currentActivityId === actId) {
+        stopCurrentActivity();
+        return;
+      }
+
+      // Ukončiť doterajšiu bežiacu činnosť a zapísať ju do timeline aj duration
+      commitCurrentActivityDuration(now);
+
+      // Spustiť novú činnosť
+      auditState.currentActivityId = actId;
+      auditState.activityStartTimestamp = now;
+      auditState.occurrences[actId] = (auditState.occurrences[actId] || 0) + 1;
+
+      saveState();
+      updateDisplay();
+      highlightActiveButton();
+    }
+
+    function stopCurrentActivity() {
+      if (!auditState.currentActivityId) return;
+      commitCurrentActivityDuration(Date.now());
+      auditState.currentActivityId = null;
+      auditState.activityStartTimestamp = null;
+      saveState();
+      updateDisplay();
+      highlightActiveButton();
+      showToast('Činnosť bola pozastavená');
+    }
+
+    function commitCurrentActivityDuration(timestampNow) {
+      if (auditState.currentActivityId && auditState.activityStartTimestamp) {
+        const deltaSec = Math.floor((timestampNow - auditState.activityStartTimestamp) / 1000);
+        if (deltaSec > 0) {
+          auditState.durations[auditState.currentActivityId] = (auditState.durations[auditState.currentActivityId] || 0) + deltaSec;
+          
+          // Zápis do chronologickej časovej osi (Timeline)
+          const act = ACTIVITIES_DEF.find(a => a.id === auditState.currentActivityId);
+          if (act) {
+            auditState.timeline.push({
+              id: 'seg_' + Date.now(),
+              activityId: act.id,
+              name: act.name,
+              category: act.category,
+              startTime: auditState.activityStartTimestamp,
+              endTime: timestampNow,
+              durationSec: deltaSec
+            });
+          }
+        }
+      }
+    }
+
+    // Korekcia času (+/- minúty) pri aktívnej aktivite
+    function adjustCurrentActivityTime(secondsOffset) {
+      if (!auditState.currentActivityId || !auditState.activityStartTimestamp) {
+        showToast('Žiadna aktivita momentálne nebeží');
+        return;
+      }
+
+      const currentCumulated = auditState.durations[auditState.currentActivityId] || 0;
+      if (secondsOffset < 0 && currentCumulated + secondsOffset < 0) {
+        showToast('Čas nemožno znížiť pod nulu');
+        return;
+      }
+
+      auditState.durations[auditState.currentActivityId] = Math.max(0, currentCumulated + secondsOffset);
+      saveState();
+      updateTimersLive();
+      showToast(secondsOffset > 0 ? '+1 minúta pridaná' : '-1 minúta odpočítaná');
+    }
+
+    function highlightActiveButton() {
+      ACTIVITIES_DEF.forEach(act => {
+        const btn = document.getElementById(`act-btn-${act.id}`);
+        const hint = document.getElementById(`act-hint-${act.id}`);
+        if (!btn) return;
+
+        if (auditState.currentActivityId === act.id) {
+          btn.className = `activity-button relative flex items-center justify-between p-2.5 rounded-xl border border-cyan-400 bg-cyan-950/40 text-white shadow-lg shadow-cyan-950/60 ring-2 ring-cyan-500/50 active-pulsing text-left`;
+          if (hint) hint.innerHTML = '<span class="text-cyan-400 font-bold">● PRÁVE BEŽÍ</span>';
+        } else {
+          let borderClass = 'border-slate-800 bg-slate-900/90 hover:bg-slate-800 text-slate-200';
+          btn.className = `activity-button relative flex items-center justify-between p-2.5 rounded-xl border ${borderClass} transition-all duration-150 text-left active:scale-[0.98]`;
+          if (hint) hint.innerText = 'Klikni pre štart';
+        }
+      });
+
+      // Aktualizácia horného banneru
+      const banner = document.getElementById('active-activity-banner');
+      if (auditState.currentActivityId) {
+        const act = ACTIVITIES_DEF.find(a => a.id === auditState.currentActivityId);
+        document.getElementById('active-activity-name').innerText = act ? act.name : '';
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    /* -------------------------------------------------------------
+     * INTERVALY & ČASOVAČE
+     * ------------------------------------------------------------- */
+    function startTimerLoops() {
+      clearInterval(mainTimerInterval);
+      mainTimerInterval = setInterval(() => {
+        updateTimersLive();
+      }, 1000);
+    }
+
+    function updateTimersLive() {
+      if (!auditState.isStarted || !auditState.startTime) return;
+
+      const now = Date.now();
+      const totalSeconds = Math.floor((now - auditState.startTime) / 1000);
+      document.getElementById('total-timer-display').innerText = formatHMS(totalSeconds);
+
+      if (auditState.currentActivityId && auditState.activityStartTimestamp) {
+        const activeDelta = Math.floor((now - auditState.activityStartTimestamp) / 1000);
+        const cumulated = (auditState.durations[auditState.currentActivityId] || 0) + activeDelta;
+        
+        document.getElementById('active-activity-timer').innerText = formatMS(cumulated);
+
+        const btnTime = document.getElementById(`act-time-${auditState.currentActivityId}`);
+        if (btnTime) {
+          btnTime.innerText = formatMS(cumulated);
+          btnTime.className = "font-mono-num font-black text-xs sm:text-sm text-cyan-300";
+        }
+      }
+
+      calculateSummaryPercentages();
+    }
+
+    /* -------------------------------------------------------------
+     * VÝPOČET KATEGÓRIÍ (PRODUKTÍVNY, LOGISTIKA, PROSTOJE)
+     * ------------------------------------------------------------- */
+    function calculateSummaryPercentages() {
+      let prodSec = 0;
+      let suppSec = 0;
+      let wasteSec = 0;
+
+      const now = Date.now();
+      ACTIVITIES_DEF.forEach(act => {
+        let sec = auditState.durations[act.id] || 0;
+        if (auditState.currentActivityId === act.id && auditState.activityStartTimestamp) {
+          sec += Math.floor((now - auditState.activityStartTimestamp) / 1000);
+        }
+
+        if (act.category === 'prod') prodSec += sec;
+        else if (act.category === 'supp') suppSec += sec;
+        else wasteSec += sec;
+      });
+
+      const totalTracked = prodSec + suppSec + wasteSec;
+
+      const prodEl = document.getElementById('cat-prod-total');
+      const suppEl = document.getElementById('cat-supp-total');
+      const wasteEl = document.getElementById('cat-waste-total');
+
+      if (prodEl) prodEl.innerText = formatHMS(prodSec);
+      if (suppEl) suppEl.innerText = formatHMS(suppSec);
+      if (wasteEl) wasteEl.innerText = formatHMS(wasteSec);
+
+      let prodPct = 0, suppPct = 0, wastePct = 0;
+      if (totalTracked > 0) {
+        prodPct = Math.round((prodSec / totalTracked) * 100);
+        suppPct = Math.round((suppSec / totalTracked) * 100);
+        wastePct = 100 - (prodPct + suppPct);
+        if (wastePct < 0) wastePct = 0;
+      }
+
+      document.getElementById('summary-prod-pct').innerText = `${prodPct}%`;
+      document.getElementById('summary-supp-pct').innerText = `${suppPct}%`;
+      document.getElementById('summary-waste-pct').innerText = `${wastePct}%`;
+
+      document.getElementById('bar-prod').style.width = `${prodPct}%`;
+      document.getElementById('bar-supp').style.width = `${suppPct}%`;
+      document.getElementById('bar-waste').style.width = `${wastePct}%`;
+
+      return { prodSec, suppSec, wasteSec, totalTracked, prodPct, suppPct, wastePct };
+    }
+
+    /* -------------------------------------------------------------
+     * ŠTART & UKONČENIE AUDITU
+     * ------------------------------------------------------------- */
+    function startAudit() {
+      const client = document.getElementById('input-client').value.trim();
+      const techs = document.getElementById('input-techs').value.trim();
+      const jobType = document.getElementById('select-job-type').value;
+
+      if (!techs) {
+        showModal('Zadaj technikov', 'Prosím, zvoľ alebo napíš mená technikov, ktorých ideš auditovať (napr. "Marko & Šimek").');
+        return;
+      }
+
+      auditState.isStarted = true;
+      auditState.startTime = Date.now();
+      auditState.client = client || 'Zákazka bez čísla';
+      auditState.techs = techs;
+      auditState.jobType = jobType;
+
+      saveState();
+      startTimerLoops();
+      updateDisplay();
+      toggleSetupCollapse(true);
+
+      showToast('Audit a príchod na stavbu bol zaznamenaný!');
+    }
+
+    function finishAuditModal() {
+      showModal(
+        'Ukončiť audit zákazky?',
+        `Naozaj chceš dokončiť audit pre <b>${escapeHtml(auditState.client)}</b>?<br>Meranie celkového času sa zastaví a prejdeme do súhrnného reportu s vyhodnotením.`,
+        `
+          <button onclick="closeModal()" class="px-3 py-2 bg-slate-800 rounded-lg text-xs font-semibold text-slate-300">Zrušiť</button>
+          <button onclick="confirmFinishAudit()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-xs font-bold text-white shadow-md">Ukončiť a vyhodnotiť</button>
+        `
+      );
+    }
+
+    function confirmFinishAudit() {
+      closeModal();
+      stopCurrentActivity();
+      auditState.endTime = Date.now();
+      auditState.isStarted = false;
+      clearInterval(mainTimerInterval);
+
+      saveState();
+      updateDisplay();
+      saveToHistory();
+      switchTab('report');
+      showToast('Audit bol úspešne dokončený!');
+    }
+
+    /* -------------------------------------------------------------
+     * AKTUALIZÁCIA DISPLEJA A HODNÔT
+     * ------------------------------------------------------------- */
+    function updateDisplay() {
+      const btnStart = document.getElementById('btn-start-audit');
+      const btnStop = document.getElementById('btn-stop-audit');
+      const subtext = document.getElementById('top-subtext');
+      const footerDot = document.getElementById('footer-status-dot');
+      const footerText = document.getElementById('footer-status-text');
+
+      if (auditState.isStarted) {
+        btnStart.classList.add('hidden');
+        btnStop.classList.remove('hidden');
+        subtext.innerText = `${auditState.techs} • ${auditState.client}`;
+        footerDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+        footerText.innerText = `Audit prebieha: ${auditState.techs}`;
+      } else {
+        btnStart.classList.remove('hidden');
+        btnStop.classList.add('hidden');
+        subtext.innerText = auditState.startTime ? 'Audit dokončený' : 'Čaká na spustenie';
+        footerDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-600';
+        footerText.innerText = auditState.startTime ? 'Audit ukončený' : 'Audit nepustený';
+      }
+
+      ACTIVITIES_DEF.forEach(act => {
+        const timeEl = document.getElementById(`act-time-${act.id}`);
+        const countEl = document.getElementById(`act-count-${act.id}`);
+        if (timeEl) timeEl.innerText = formatMS(auditState.durations[act.id] || 0);
+        if (countEl) countEl.innerText = `${auditState.occurrences[act.id] || 0}x`;
+      });
+
+      if (auditState.client) document.getElementById('input-client').value = auditState.client;
+      if (auditState.techs) document.getElementById('input-techs').value = auditState.techs;
+      if (auditState.jobType) document.getElementById('select-job-type').value = auditState.jobType;
+      if (auditState.webhookUrl) document.getElementById('input-webhook-url').value = auditState.webhookUrl;
+
+      calculateSummaryPercentages();
+      highlightActiveButton();
+      renderReportTab();
+    }
+
+    /* -------------------------------------------------------------
+     * REPORT TAB & SVG DONUT CHART GENERÁCIA
+     * ------------------------------------------------------------- */
+    function renderReportTab() {
+      const stats = calculateSummaryPercentages();
+
+      let totalElapsed = 0;
+      if (auditState.startTime) {
+        const end = auditState.endTime || Date.now();
+        totalElapsed = Math.floor((end - auditState.startTime) / 1000);
+      }
+
+      document.getElementById('report-client-name').innerText = auditState.client || 'Zákazka neurčená';
+      document.getElementById('report-techs-name').innerText = `Technici: ${auditState.techs || 'Nezadaní'}`;
+      document.getElementById('report-job-badge').innerText = auditState.jobType;
+      document.getElementById('report-total-time').innerText = formatHMS(totalElapsed);
+      document.getElementById('print-date').innerText = new Date(auditState.startTime || Date.now()).toLocaleDateString('sk-SK');
+
+      // 3 piliere
+      document.getElementById('report-prod-time').innerText = formatMS(stats.prodSec);
+      document.getElementById('report-prod-share').innerText = `${stats.prodPct}% času`;
+
+      document.getElementById('report-supp-time').innerText = formatMS(stats.suppSec);
+      document.getElementById('report-supp-share').innerText = `${stats.suppPct}% času`;
+
+      document.getElementById('report-waste-time').innerText = formatMS(stats.wasteSec);
+      document.getElementById('report-waste-share').innerText = `${stats.wastePct}% času`;
+
+      // VYKRESLENIE SVG KOLÁČOVÉHO GRAFU (DONUT CHART)
+      renderSvgDonutChart(stats);
+
+      // Zoradené aktivity
+      const activitiesList = document.getElementById('report-activities-list');
+      activitiesList.innerHTML = '';
+
+      const sortedActivities = [...ACTIVITIES_DEF].sort((a, b) => {
+        return (auditState.durations[b.id] || 0) - (auditState.durations[a.id] || 0);
+      });
+
+      sortedActivities.forEach(act => {
+        const sec = auditState.durations[act.id] || 0;
+        if (sec === 0) return;
+
+        const pct = stats.totalTracked > 0 ? Math.round((sec / stats.totalTracked) * 100) : 0;
+        let colorBadge = 'text-emerald-400 bg-emerald-950/40 border-emerald-900/50';
+        if (act.category === 'supp') colorBadge = 'text-amber-400 bg-amber-950/40 border-amber-900/50';
+        if (act.category === 'waste') colorBadge = 'text-rose-400 bg-rose-950/40 border-rose-900/50';
+
+        const row = document.createElement('div');
+        row.className = `flex items-center justify-between p-2 rounded-lg border bg-slate-950/60 border-slate-800 print-card`;
+        row.innerHTML = `
+          <div class="flex items-center space-x-2 truncate pr-2">
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold border ${colorBadge}">${pct}%</span>
+            <span class="truncate text-slate-200 print-text-dark">${act.name}</span>
+          </div>
+          <div class="font-mono-num font-bold text-slate-300 print-text-dark shrink-0">
+            ${formatMS(sec)} <span class="text-[10px] font-normal text-slate-500">(${auditState.occurrences[act.id] || 1}x)</span>
+          </div>
+        `;
+        activitiesList.appendChild(row);
+      });
+
+      if (activitiesList.children.length === 0) {
+        activitiesList.innerHTML = '<p class="text-slate-500 italic p-2">Zatiaľ neboli namerané žiadne činnosti.</p>';
+      }
+
+      // VYKRESLENIE TIMELINE
+      renderTimelineList();
+
+      // Checklist nedostatky & fotodokumentácia v reporte
+      const issuesContainer = document.getElementById('report-checklist-issues');
+      issuesContainer.innerHTML = '';
+
+      let passCount = 0;
+      let failCount = 0;
+      let naCount = 0;
+
+      CHECKLIST_DEF.forEach(item => {
+        const status = auditState.checklistStatus[item.id];
+        const note = auditState.checklistNotes[item.id];
+        const photo = auditState.checklistPhotos[item.id];
+
+        if (status === 'pass') passCount++;
+        else if (status === 'fail') failCount++;
+        else if (status === 'na') naCount++;
+
+        // Ak je chyba, alebo je k bodu priložená fotka či poznámka, vykresliť do reportu
+        if (status === 'fail' || photo || note) {
+          const itemCard = document.createElement('div');
+          const isFail = status === 'fail';
+          itemCard.className = `p-2.5 rounded-lg border flex flex-col gap-1.5 print-card ${isFail ? 'bg-rose-950/30 border-rose-800/50' : 'bg-slate-950/60 border-slate-800'}`;
+          
+          itemCard.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="font-bold ${isFail ? 'text-rose-300' : 'text-slate-200 print-text-dark'} flex items-center gap-1.5">
+                ${isFail ? '<i class="fa-solid fa-triangle-exclamation text-rose-400"></i>' : '<i class="fa-solid fa-circle-check text-emerald-400"></i>'}
+                ${item.title}
+              </span>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${isFail ? 'bg-rose-900/60 text-rose-300' : 'bg-slate-800 text-slate-300'}">
+                ${isFail ? 'CHYBA' : (status === 'pass' ? 'DODRŽANÉ' : 'N/A')}
+              </span>
+            </div>
+            ${note ? `<div class="text-[11px] text-slate-300 print-text-dark"><b>Poznámka:</b> "${escapeHtml(note)}"</div>` : ''}
+            ${photo ? `
+              <div class="mt-1 flex items-center gap-2">
+                <img src="${photo}" onclick="openPhotoModal('${item.id}')" alt="Foto k zisteniu" class="w-20 h-20 object-cover rounded-lg border border-slate-700 cursor-pointer shadow-md">
+                <span class="text-[10px] text-slate-400 italic">Fotodokumentácia k bodu (klikni pre zväčšenie)</span>
+              </div>
+            ` : ''}
+          `;
+          issuesContainer.appendChild(itemCard);
+        }
+      });
+
+      const statsEl = document.getElementById('report-checklist-stats');
+      statsEl.innerHTML = `<span class="text-emerald-400">${passCount} OK</span> • <span class="text-rose-400 font-bold">${failCount} Porušení</span> • <span class="text-slate-500">${naCount} N/A</span>`;
+
+      if (issuesContainer.children.length === 0) {
+        issuesContainer.innerHTML = '<div class="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-900/40 text-emerald-300 font-medium flex items-center gap-2"><i class="fa-solid fa-check-circle"></i> Žiadne porušenia technologických postupov nezaznamenané!</div>';
+      }
+    }
+
+    function renderSvgDonutChart(stats) {
+      const circumference = 2 * Math.PI * 40; // 251.32
+      const prodCirc = (stats.prodPct / 100) * circumference;
+      const suppCirc = (stats.suppPct / 100) * circumference;
+      const wasteCirc = (stats.wastePct / 100) * circumference;
+
+      const prodEl = document.getElementById('pie-prod-circle');
+      const suppEl = document.getElementById('pie-supp-circle');
+      const wasteEl = document.getElementById('pie-waste-circle');
+
+      // Nastavenie segmentov
+      prodEl.setAttribute('stroke-dasharray', `${prodCirc} ${circumference}`);
+      prodEl.setAttribute('stroke-dashoffset', '0');
+
+      suppEl.setAttribute('stroke-dasharray', `${suppCirc} ${circumference}`);
+      suppEl.setAttribute('stroke-dashoffset', `-${prodCirc}`);
+
+      wasteEl.setAttribute('stroke-dasharray', `${wasteCirc} ${circumference}`);
+      wasteEl.setAttribute('stroke-dashoffset', `-${prodCirc + suppCirc}`);
+
+      document.getElementById('pie-center-pct').innerText = `${stats.prodPct}%`;
+      document.getElementById('pie-legend-prod').innerText = `${formatMS(stats.prodSec)} (${stats.prodPct}%)`;
+      document.getElementById('pie-legend-supp').innerText = `${formatMS(stats.suppSec)} (${stats.suppPct}%)`;
+      document.getElementById('pie-legend-waste').innerText = `${formatMS(stats.wasteSec)} (${stats.wastePct}%)`;
+    }
+
+    function renderTimelineList() {
+      const container = document.getElementById('report-timeline-container');
+      const badge = document.getElementById('timeline-count-badge');
+      if (!container) return;
+
+      container.innerHTML = '';
+      const list = auditState.timeline || [];
+      badge.innerText = `${list.length} segmentov`;
+
+      if (list.length === 0) {
+        container.innerHTML = '<p class="text-slate-500 italic p-1">Zatiaľ žiadne zaznamenané segmenty.</p>';
+        return;
+      }
+
+      list.forEach((seg, idx) => {
+        const startStr = new Date(seg.startTime).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+        const endStr = new Date(seg.endTime).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+        
+        let dotColor = 'bg-emerald-400';
+        if (seg.category === 'supp') dotColor = 'bg-amber-400';
+        if (seg.category === 'waste') dotColor = 'bg-rose-400';
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between py-1 border-b border-slate-800/60 text-[11px]';
+        row.innerHTML = `
+          <div class="flex items-center space-x-2 truncate">
+            <span class="w-1.5 h-1.5 rounded-full ${dotColor} shrink-0"></span>
+            <span class="text-slate-400 font-mono-num">${startStr} - ${endStr}</span>
+            <span class="text-slate-200 truncate">${seg.name}</span>
+          </div>
+          <div class="font-mono-num font-semibold text-slate-300 shrink-0">
+            ${formatMS(seg.durationSec)}
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    /* -------------------------------------------------------------
+     * EXPORTY: TLAČ / PDF, WEBHOOK, JSON, SCHRÁNKA
+     * ------------------------------------------------------------- */
+    function printProtocol() {
+      renderReportTab();
+      window.print();
+    }
+
+    async function triggerWebhookExport() {
+      const url = auditState.webhookUrl || document.getElementById('input-webhook-url').value.trim();
+      if (!url) {
+        showModal('Chýba Webhook URL', 'Zadaj webhook URL v hornej karte "Nastavenie auditu & Zákazka" (rozbaľ sekciu Webhook).');
+        return;
+      }
+
+      const btn = document.getElementById('btn-webhook-export');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Odosielam...';
+      btn.disabled = true;
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        client: auditState.client,
+        technicians: auditState.techs,
+        jobType: auditState.jobType,
+        totalTimeSeconds: auditState.startTime ? Math.floor(((auditState.endTime || Date.now()) - auditState.startTime) / 1000) : 0,
+        statistics: calculateSummaryPercentages(),
+        activitiesBreakdown: auditState.durations,
+        occurrences: auditState.occurrences,
+        timeline: auditState.timeline,
+        checklistStatus: auditState.checklistStatus,
+        checklistNotes: auditState.checklistNotes,
+        generalNotes: document.getElementById('auditor-general-notes').value.trim()
+      };
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+          showToast('Dáta úspešne odoslané na webhook!');
+        } else {
+          showModal('Chyba Webhooku', `Server odpovedal so stavovým kódom: ${response.status}`);
+        }
+      } catch (err) {
+        showModal('Chyba spojenia', 'Nepodarilo sa spojiť s webhook adresou. Skontroluj internetové pripojenie alebo CORS nastavenie endpointu.');
+      } finally {
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Odoslať Webhook';
+        btn.disabled = false;
+      }
+    }
+
+    function exportAuditJSON() {
+      const payload = {
+        meta: 'HVAC Field Auditor Export',
+        exportedAt: new Date().toISOString(),
+        client: auditState.client,
+        technicians: auditState.techs,
+        jobType: auditState.jobType,
+        startTime: auditState.startTime,
+        endTime: auditState.endTime || Date.now(),
+        statistics: calculateSummaryPercentages(),
+        durations: auditState.durations,
+        occurrences: auditState.occurrences,
+        timeline: auditState.timeline,
+        checklistStatus: auditState.checklistStatus,
+        checklistNotes: auditState.checklistNotes,
+        generalNotes: document.getElementById('auditor-general-notes').value.trim()
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+      const downloadAnchor = document.createElement('a');
+      const filename = `audit_${(auditState.client || 'hvac').replace(/\s+/g, '_')}_${Date.now()}.json`;
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", filename);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast('JSON export bol stiahnutý');
+    }
+
+    function generateReportText() {
+      const stats = calculateSummaryPercentages();
+      const totalSec = auditState.startTime ? Math.floor(((auditState.endTime || Date.now()) - auditState.startTime) / 1000) : 0;
+      const notes = document.getElementById('auditor-general-notes') ? document.getElementById('auditor-general-notes').value.trim() : '';
+
+      let text = `======================================\n`;
+      text += `HVAC AUDIT REPORT: ${auditState.client || 'Zákazka'}\n`;
+      text += `Technici: ${auditState.techs || 'Neuvedené'}\n`;
+      text += `Typ zásahu: ${auditState.jobType || 'Neuvedené'}\n`;
+      text += `Dátum: ${new Date(auditState.startTime || Date.now()).toLocaleDateString('sk-SK')}\n`;
+      text += `Celkový čas na zákazke: ${formatHMS(totalSec)}\n`;
+      text += `======================================\n\n`;
+
+      text += `📊 ROZPAD ČASU (EFEKTIVITA):\n`;
+      text += `🟢 Produktívna práca: ${formatMS(stats.prodSec)} (${stats.prodPct}%)\n`;
+      text += `🟡 Logistika / Podpora: ${formatMS(stats.suppSec)} (${stats.suppPct}%)\n`;
+      text += `🔴 Prostoje / Straty: ${formatMS(stats.wasteSec)} (${stats.wastePct}%)\n\n`;
+
+      text += `⏱️ DETAILNÉ ČINNOSTI:\n`;
+      ACTIVITIES_DEF.forEach(act => {
+        const s = auditState.durations[act.id] || 0;
+        if (s > 0) {
+          text += `- ${act.name}: ${formatMS(s)} (${auditState.occurrences[act.id] || 1}x)\n`;
+        }
+      });
+
+      text += `\n📋 KONTROLA POSTUPOV (13 bodov):\n`;
+      CHECKLIST_DEF.forEach(c => {
+        const st = auditState.checklistStatus[c.id];
+        const n = auditState.checklistNotes[c.id];
+        const hasPic = !!auditState.checklistPhotos[c.id];
+        const statusLabel = st === 'pass' ? '✅ OK' : (st === 'fail' ? '❌ CHYBA' : '➖ N/A');
+        text += `${statusLabel} ${c.title} ${n ? `(${n})` : ''} ${hasPic ? '[FOTO]' : ''}\n`;
+      });
+
+      if (notes) {
+        text += `\n📝 ODPORÚČANIE AUDÍTORA:\n${notes}\n`;
+      }
+
+      text += `\nVygenerované cez HVAC Field Auditor PRO.`;
+      return text;
+    }
+
+    function shareReportEmail() {
+      const text = generateReportText();
+      const client = auditState.client || 'Zákazka';
+      const date = new Date(auditState.startTime || Date.now()).toLocaleDateString('sk-SK');
+      const subject = `Audit HVAC: ${client} (${date})`;
+      const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+      window.location.href = mailtoUrl;
+    }
+
+    function shareReportNative() {
+      const text = generateReportText();
+      const client = auditState.client || 'Zákazka';
+      if (navigator.share) {
+        navigator.share({
+          title: `Audit technikov - ${client}`,
+          text: text
+        }).catch(err => {
+          if (err.name !== 'AbortError') {
+            copyReportToClipboard();
+          }
+        });
+      } else {
+        copyReportToClipboard();
+      }
+    }
+
+    function copyReportToClipboard() {
+      const text = generateReportText();
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Report skopírovaný do schránky!');
+      }).catch(() => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('Report skopírovaný!');
+      });
+    }
+
+    /* -------------------------------------------------------------
+     * RÝCHLA POZNÁMKA V TERÉNE
+     * ------------------------------------------------------------- */
+    function quickAddNoteModal() {
+      showModal(
+        'Rýchla poznámka v teréne',
+        `
+          <p class="text-slate-400 text-xs mb-2">Zapíš postreh (napr. "Zabudli si v dodávke jadrový vrták", "Nemajú ochranné okuliare"):</p>
+          <input type="text" id="quick-note-input" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500" placeholder="Sem napíš postreh...">
+        `,
+        `
+          <button onclick="closeModal()" class="px-3 py-2 bg-slate-800 rounded-lg text-xs font-semibold text-slate-300">Zrušiť</button>
+          <button onclick="saveQuickNote()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-xs font-bold text-white shadow-md">Uložiť poznámku</button>
+        `
+      );
+      setTimeout(() => {
+        const inp = document.getElementById('quick-note-input');
+        if (inp) inp.focus();
+      }, 100);
+    }
+
+    function saveQuickNote() {
+      const inp = document.getElementById('quick-note-input');
+      if (inp && inp.value.trim()) {
+        const text = inp.value.trim();
+        const timeStr = new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+        const notesArea = document.getElementById('auditor-general-notes');
+        notesArea.value = (notesArea.value ? notesArea.value + '\n' : '') + `[${timeStr}] ${text}`;
+        auditState.generalNotes = notesArea.value;
+        saveState();
+        showToast('Poznámka pridaná do záveru');
+      }
+      closeModal();
+    }
+
+    /* -------------------------------------------------------------
+     * UKLADANIE DO HISTÓRIE & RESET
+     * ------------------------------------------------------------- */
+    function saveToHistory() {
+      try {
+        const history = JSON.parse(localStorage.getItem('hvac_audit_history_v2') || '[]');
+        history.unshift({
+          date: new Date().toLocaleDateString('sk-SK'),
+          client: auditState.client,
+          techs: auditState.techs,
+          jobType: auditState.jobType,
+          totalDuration: auditState.startTime ? Math.floor(((auditState.endTime || Date.now()) - auditState.startTime) / 1000) : 0,
+          stats: calculateSummaryPercentages()
+        });
+        if (history.length > 25) history.pop();
+        localStorage.setItem('hvac_audit_history_v2', JSON.stringify(history));
+        renderHistory();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderHistory() {
+      const container = document.getElementById('history-list');
+      try {
+        const history = JSON.parse(localStorage.getItem('hvac_audit_history_v2') || '[]');
+        if (history.length === 0) {
+          container.innerHTML = '<p class="text-slate-500 italic">Zatiaľ žiadne uložené audity.</p>';
+          return;
+        }
+
+        container.innerHTML = '';
+        history.forEach((h) => {
+          const item = document.createElement('div');
+          item.className = 'p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between';
+          item.innerHTML = `
+            <div>
+              <div class="font-bold text-white text-xs">${escapeHtml(h.client)}</div>
+              <div class="text-[11px] text-slate-400">${h.techs} • ${h.date}</div>
+            </div>
+            <div class="text-right">
+              <div class="font-mono-num font-bold text-cyan-400 text-xs">${formatHMS(h.totalDuration)}</div>
+              <div class="text-[10px] text-slate-400">🟢 ${h.stats.prodPct}% | 🔴 ${h.stats.wastePct}%</div>
+            </div>
+          `;
+          container.appendChild(item);
+        });
+      } catch (e) {
+        container.innerHTML = '<p class="text-slate-500 italic">Chyba pri načítaní histórie.</p>';
+      }
+    }
+
+    function clearHistory() {
+      localStorage.removeItem('hvac_audit_history_v2');
+      renderHistory();
+      showToast('História bola vymazaná');
+    }
+
+    function saveAndResetAuditModal() {
+      showModal(
+        'Založiť nový audit?',
+        'Všetky aktuálne namerané stopky, checklist a fotky sa vymažú a pripraví sa čistý formulár pre ďalšiu montáž.',
+        `
+          <button onclick="closeModal()" class="px-3 py-2 bg-slate-800 rounded-lg text-xs font-semibold text-slate-300">Späť</button>
+          <button onclick="confirmReset()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-xs font-bold text-white shadow-md">Áno, začať nový</button>
+        `
+      );
+    }
+
+    function confirmReset() {
+      closeModal();
+      localStorage.removeItem('hvac_current_audit_state_v2');
+      location.reload();
+    }
+
+    /* -------------------------------------------------------------
+     * LOCALSTORAGE & PERZISTENCIA
+     * ------------------------------------------------------------- */
+    function saveState() {
+      const notesArea = document.getElementById('auditor-general-notes');
+      if (notesArea) auditState.generalNotes = notesArea.value;
+      try {
+        localStorage.setItem('hvac_current_audit_state_v2', JSON.stringify(auditState));
+      } catch (err) {
+        console.warn('LocalStorage limit dosiahnutý pri ukladaní fotiek:', err);
+      }
+    }
+
+    function loadSavedState() {
+      try {
+        const saved = localStorage.getItem('hvac_current_audit_state_v2');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          auditState = { ...auditState, ...parsed };
+          if (auditState.generalNotes) {
+            document.getElementById('auditor-general-notes').value = auditState.generalNotes;
+          }
+        }
+      } catch (e) {
+        console.error('Chyba pri obnove stavu:', e);
+      }
+    }
+
+    function saveWebhookUrl(val) {
+      auditState.webhookUrl = val.trim();
+      saveState();
+      showToast('Webhook URL bola uložená');
+    }
+
+    /* -------------------------------------------------------------
+     * POMOCNÉ FUNKCIE (PRESETY, TABY, FORMÁTOVANIE)
+     * ------------------------------------------------------------- */
+    function selectPresetTech(name) {
+      document.getElementById('input-techs').value = name;
+      auditState.techs = name;
+      saveState();
+    }
+
+    function toggleSetupCollapse(forceCollapse) {
+      const fields = document.getElementById('setup-fields');
+      const icon = document.getElementById('setup-collapse-icon');
+      
+      const shouldCollapse = forceCollapse !== undefined ? forceCollapse : !fields.classList.contains('hidden');
+
+      if (shouldCollapse) {
+        fields.classList.add('hidden');
+        icon.className = 'fa-solid fa-chevron-down';
+      } else {
+        fields.classList.remove('hidden');
+        icon.className = 'fa-solid fa-chevron-up';
+      }
+    }
+
+    function switchTab(tabId) {
+      document.getElementById('tab-content-tracker').classList.add('hidden');
+      document.getElementById('tab-content-checklist').classList.add('hidden');
+      document.getElementById('tab-content-report').classList.add('hidden');
+
+      const tabs = ['tracker', 'checklist', 'report'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        btn.className = 'py-2.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all text-slate-400 hover:text-white';
+      });
+
+      document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
+      document.getElementById(`tab-btn-${tabId}`).className = 'py-2.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all bg-cyan-600 text-white shadow-sm';
+
+      if (tabId === 'report') {
+        renderReportTab();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function formatHMS(sec) {
+      if (isNaN(sec) || sec < 0) sec = 0;
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+
+    function formatMS(sec) {
+      if (isNaN(sec) || sec < 0) sec = 0;
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      if (h > 0) return `${h}h ${pad(m)}m`;
+      return `${pad(m)}:${pad(s)}`;
+    }
+
+    function pad(n) {
+      return n < 10 ? '0' + n : n;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function showModal(title, contentHtml, actionsHtml) {
+      document.getElementById('modal-title').innerHTML = title;
+      document.getElementById('modal-body').innerHTML = contentHtml;
+      const act = document.getElementById('modal-actions');
+      if (actionsHtml) {
+        act.innerHTML = actionsHtml;
+      } else {
+        act.innerHTML = '<button onclick="closeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-300">Rozumiem</button>';
+      }
+      document.getElementById('custom-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('custom-modal').classList.add('hidden');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').innerText = msg;
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 2500);
+    }
+  </script>
+</body>
+</html>
