@@ -115,7 +115,10 @@
           <h1 class="text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
             HVAC AUDITOR <span class="text-[10px] bg-cyan-500/20 text-cyan-400 font-semibold px-1.5 py-0.5 rounded">PRO</span>
           </h1>
-          <p id="top-subtext" class="text-xs text-slate-400 truncate max-w-[150px] sm:max-w-xs">Čaká na spustenie</p>
+          <div class="flex items-center gap-1.5 text-xs text-slate-400">
+            <span id="top-subtext" class="truncate max-w-[110px]">Čaká na spustenie</span>
+            <span id="auditor-header-badge" class="hidden text-[10px] bg-slate-800 text-cyan-300 font-semibold px-1.5 py-0.5 rounded border border-slate-700 items-center gap-1"></span>
+          </div>
         </div>
       </div>
 
@@ -164,7 +167,7 @@
         </div>
         <div class="text-right text-xs text-slate-600">
           <div class="font-bold">Dátum: <span id="print-date">-</span></div>
-          <div>Vyhotovil: Audítor v teréne</div>
+          <div>Vyhotovil: <span id="print-auditor-name">Cyril Gergely</span></div>
         </div>
       </div>
     </div>
@@ -542,6 +545,57 @@
     </div>
   </footer>
 
+  <!-- ================= PRIHLASOVACIA OBRAZOVKA (AUTH) ================= -->
+  <div id="login-overlay" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+      <div class="text-center">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-600 to-cyan-400 flex items-center justify-center text-white mx-auto shadow-lg shadow-cyan-600/30 mb-2.5">
+          <i class="fa-solid fa-snowflake text-xl"></i>
+        </div>
+        <h2 class="text-lg font-black tracking-tight text-white">HVAC Field Auditor</h2>
+        <p class="text-[11px] text-slate-400">Zadajte prístupové heslo pre vstup do auditu</p>
+      </div>
+
+      <form onsubmit="handleLoginSubmit(event)" class="space-y-3.5 pt-1">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Meno audítora</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">
+              <i class="fa-solid fa-user"></i>
+            </span>
+            <input type="text" id="login-name" required value="Cyril Gergely"
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Heslo</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">
+              <i class="fa-solid fa-lock"></i>
+            </span>
+            <input type="password" id="login-password" required placeholder="Zadajte heslo..."
+                   class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-10 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+            <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white">
+              <i id="password-toggle-icon" class="fa-solid fa-eye text-xs"></i>
+            </button>
+          </div>
+          <p id="login-error" class="hidden text-rose-400 text-[11px] font-semibold mt-1.5 flex items-center gap-1">
+            <i class="fa-solid fa-circle-exclamation"></i> Nesprávne heslo. Skúste znova.
+          </p>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 active:scale-95 rounded-xl text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-600/30 transition-all">
+          <i class="fa-solid fa-right-to-bracket"></i> Prihlásiť sa
+        </button>
+      </form>
+
+      <div class="text-center pt-2 border-t border-slate-800/80 text-[10px] text-slate-500">
+        HVAC Auditor PRO • Zabezpečený prístup
+      </div>
+    </div>
+  </div>
+
   <!-- ================= UNIVERZÁLNY MODAL (BEZ ALERTU) ================= -->
   <div id="custom-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-4 shadow-2xl space-y-3">
@@ -652,9 +706,112 @@
     let mainTimerInterval = null;
 
     /* -------------------------------------------------------------
+     * PRIHLASOVANIE & AUTENTIFIKÁCIA AUDÍTORA
+     * ------------------------------------------------------------- */
+    const AUTH_PASSWORD = 'Zima2026';
+    let currentUser = null;
+
+    function checkAuth() {
+      try {
+        const saved = localStorage.getItem('hvac_auth_user');
+        if (saved) {
+          currentUser = JSON.parse(saved);
+          if (currentUser && currentUser.isLoggedIn) {
+            applyLoggedInUser(currentUser.name);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Chyba načítania používateľa:', e);
+      }
+      showLoginOverlay();
+    }
+
+    function showLoginOverlay() {
+      const overlay = document.getElementById('login-overlay');
+      if (overlay) overlay.classList.remove('hidden');
+      const passInp = document.getElementById('login-password');
+      if (passInp) {
+        passInp.value = '';
+        passInp.classList.remove('border-rose-500');
+        setTimeout(() => passInp.focus(), 100);
+      }
+      const err = document.getElementById('login-error');
+      if (err) err.classList.add('hidden');
+    }
+
+    function handleLoginSubmit(event) {
+      if (event) event.preventDefault();
+      const nameInp = document.getElementById('login-name');
+      const passInp = document.getElementById('login-password');
+      const name = (nameInp ? nameInp.value.trim() : '') || 'Cyril Gergely';
+      const pass = passInp ? passInp.value : '';
+
+      if (pass !== AUTH_PASSWORD) {
+        const err = document.getElementById('login-error');
+        if (err) err.classList.remove('hidden');
+        if (passInp) passInp.classList.add('border-rose-500');
+        return;
+      }
+
+      currentUser = { name: name, isLoggedIn: true, loginTime: Date.now() };
+      localStorage.setItem('hvac_auth_user', JSON.stringify(currentUser));
+      applyLoggedInUser(name);
+      showToast(`Prihlásený: ${name}`);
+    }
+
+    function applyLoggedInUser(name) {
+      const overlay = document.getElementById('login-overlay');
+      if (overlay) overlay.classList.add('hidden');
+
+      const badge = document.getElementById('auditor-header-badge');
+      if (badge) {
+        badge.classList.remove('hidden');
+        badge.classList.add('inline-flex');
+        badge.innerHTML = `
+          <i class="fa-solid fa-user text-cyan-400"></i>
+          <span class="truncate max-w-[100px]">${escapeHtml(name)}</span>
+          <button onclick="logout()" title="Odhlásiť sa" class="text-slate-400 hover:text-rose-400 ml-1">
+            <i class="fa-solid fa-right-from-bracket"></i>
+          </button>
+        `;
+      }
+
+      const printAuditor = document.getElementById('print-auditor-name');
+      if (printAuditor) printAuditor.innerText = name;
+    }
+
+    function logout() {
+      currentUser = null;
+      localStorage.removeItem('hvac_auth_user');
+      const badge = document.getElementById('auditor-header-badge');
+      if (badge) {
+        badge.classList.add('hidden');
+        badge.classList.remove('inline-flex');
+        badge.innerHTML = '';
+      }
+      showLoginOverlay();
+      showToast('Boli ste úspešne odhlásený');
+    }
+
+    function togglePasswordVisibility() {
+      const passInp = document.getElementById('login-password');
+      const icon = document.getElementById('password-toggle-icon');
+      if (!passInp) return;
+      if (passInp.type === 'password') {
+        passInp.type = 'text';
+        if (icon) icon.className = 'fa-solid fa-eye-slash text-xs';
+      } else {
+        passInp.type = 'password';
+        if (icon) icon.className = 'fa-solid fa-eye text-xs';
+      }
+    }
+
+    /* -------------------------------------------------------------
      * INICIALIZÁCIA PO NAČÍTANÍ STRÁNKY
      * ------------------------------------------------------------- */
     window.addEventListener('DOMContentLoaded', () => {
+      checkAuth();
       loadSavedState();
       renderActivityButtons();
       renderChecklist();
@@ -1435,6 +1592,7 @@
       const payload = {
         meta: 'HVAC Field Auditor Export',
         exportedAt: new Date().toISOString(),
+        auditor: currentUser ? currentUser.name : 'Cyril Gergely',
         client: auditState.client,
         technicians: auditState.techs,
         jobType: auditState.jobType,
@@ -1467,6 +1625,7 @@
 
       let text = `======================================\n`;
       text += `HVAC AUDIT REPORT: ${auditState.client || 'Zákazka'}\n`;
+      text += `Audítor: ${currentUser ? currentUser.name : 'Cyril Gergely'}\n`;
       text += `Technici: ${auditState.techs || 'Neuvedené'}\n`;
       text += `Typ zásahu: ${auditState.jobType || 'Neuvedené'}\n`;
       text += `Dátum: ${new Date(auditState.startTime || Date.now()).toLocaleDateString('sk-SK')}\n`;
